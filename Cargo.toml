@@ -6,11 +6,11 @@ authors = [
     "Sean Bowe <sean@electriccoin.co>",
     "Jay Graber",
     "Jack Grigg <jack@electriccoin.co>",
-    "Daira Hopwood <daira@electriccoin.co>",
-    "Ying Tong Lai <yingtong@electriccoin.co>",
+    "Daira-Emma Hopwood <daira@jacaranda.org>",
+    "Ying Tong Lai",
     "Simon Liu",
     "Kris Nuttycombe <kris@electriccoin.co>",
-    "Greg Pfeil <greg@electriccoin.co>",
+    "Greg Pfeil",
     "Larry Ruane <larry@electriccoin.co>",
     "Steven Smith <steven@electriccoin.co>"
 ]
@@ -19,7 +19,7 @@ repository = "https://github.com/zcash/zcash"
 readme = "README.md"
 license = "MIT OR Apache-2.0"
 edition = "2018"
-rust-version = "1.69"
+rust-version = "1.78"
 
 [package.metadata.vet]
 store = { path = "./qa/supply-chain" }
@@ -52,26 +52,29 @@ libc = "0.2"
 jubjub = "0.10"
 memuse = "0.2"
 nonempty = "0.7"
-orchard = "0.6"
+orchard = "0.8"
+sapling = { package = "sapling-crypto", version = "0.1", features = ["temporary-zcashd"] }
 secp256k1 = "0.26"
 subtle = "2.2"
 rand_core = "0.6"
+redjubjub = "0.7"
 tracing = "0.1"
 tracing-core = "0.1"
 tracing-appender = "0.2"
 zcash_address = "0.3"
 zcash_encoding = "0.2"
-zcash_history = "0.3"
+zcash_history = "0.4"
 zcash_note_encryption = "0.4"
-zcash_primitives = { version = "0.13", features = ["temporary-zcashd", "transparent-inputs"] }
-zcash_proofs = { version = "0.13", features = ["directories"] }
+zcash_primitives = { version = "0.15", features = ["temporary-zcashd", "transparent-inputs"] }
+zcash_proofs = { version = "0.15", features = ["directories"] }
+zcash_protocol = { version = "0.1", features = ["local-consensus"] }
 ed25519-zebra = "4"
 zeroize = "1.4.2"
 wagyu-zcash-parameters = "0.2"
 
 # Rust/C++ interop
 # The version needs to match depends/packages/native_cxxbridge.mk
-cxx = { version = "=1.0.113", features = ["c++17"] }
+cxx = { version = "=1.0.122", features = ["c++17"] }
 
 # Rust threading
 rayon = "1.5"
@@ -109,7 +112,7 @@ time = { version = "0.3", features = ["formatting", "macros"] }
 [dev-dependencies]
 incrementalmerkletree = { version = "0.5", features = ["test-dependencies"] }
 proptest = "1.0.0"
-zcash_primitives = { version = "0.13", features = ["temporary-zcashd", "transparent-inputs", "test-dependencies"] }
+zcash_primitives = { version = "0.15", features = ["temporary-zcashd", "transparent-inputs", "test-dependencies"] }
 
 [dependencies.tracing-subscriber]
 version = "0.3"

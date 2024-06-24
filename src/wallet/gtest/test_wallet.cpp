@@ -421,13 +421,14 @@ TEST(WalletTests, SetSaplingNoteAddrsInCWalletTx) {
         auto cm = note.cmu().value();
         SaplingMerkleTree tree;
         tree.append(cm);
+        auto anchor = tree.root();
         auto witness = tree.witness();
 
         auto nf = note.nullifier(fvk, witness.position());
         ASSERT_TRUE(nf);
         uint256 nullifier = nf.value();
 
-        auto builder = TransactionBuilder(Params(), 1, std::nullopt);
+        auto builder = TransactionBuilder(Params(), 1, std::nullopt, anchor);
         builder.AddSaplingSpend(sk, note, witness);
         builder.AddSaplingOutput(fvk.ovk, pk, 50000, {});
         builder.SetFee(0);
@@ -564,7 +565,7 @@ TEST(WalletTests, FindMySaplingNotes) {
     auto testNote = GetTestSaplingNote(pa, 50000);
 
     // Generate transaction
-    auto builder = TransactionBuilder(Params(), 1, std::nullopt);
+    auto builder = TransactionBuilder(Params(), 1, std::nullopt, testNote.tree.root());
     builder.AddSaplingSpend(sk, testNote.note, testNote.tree.witness());
     builder.AddSaplingOutput(extfvk.fvk.ovk, pa, 25000, {});
     auto tx = builder.Build().GetTxOrThrow();
@@ -708,10 +709,11 @@ TEST(WalletTests, GetConflictedSaplingNotes) {
 
         MerkleFrontiers frontiers;
         frontiers.sapling.append(cm);
+        auto anchor = frontiers.sapling.root();
         auto witness = frontiers.sapling.witness();
 
         // Generate tx to create output note B
-        auto builder = TransactionBuilder(Params(), 1, std::nullopt);
+        auto builder = TransactionBuilder(Params(), 1, std::nullopt, anchor);
         builder.AddSaplingSpend(sk, note, witness);
         builder.AddSaplingOutput(extfvk.fvk.ovk, pk, 35000, {});
         auto tx = builder.Build().GetTxOrThrow();
@@ -758,13 +760,13 @@ TEST(WalletTests, GetConflictedSaplingNotes) {
         auto nullifier2 = maybe_nf.value();
 
         // Create transaction to spend note B
-        auto builder2 = TransactionBuilder(Params(), 2, std::nullopt);
+        auto builder2 = TransactionBuilder(Params(), 2, std::nullopt, spend_note_witness.root());
         builder2.AddSaplingSpend(sk, note2, spend_note_witness);
         builder2.AddSaplingOutput(extfvk.fvk.ovk, pk, 2000, {});
         auto tx2 = builder2.Build().GetTxOrThrow();
 
         // Create conflicting transaction which also spends note B
-        auto builder3 = TransactionBuilder(Params(), 2, std::nullopt);
+        auto builder3 = TransactionBuilder(Params(), 2, std::nullopt, spend_note_witness.root());
         builder3.AddSaplingSpend(sk, note2, spend_note_witness);
         builder3.AddSaplingOutput(extfvk.fvk.ovk, pk, 1999, {});
         auto tx3 = builder3.Build().GetTxOrThrow();
@@ -822,7 +824,7 @@ TEST(WalletTests, GetConflictedOrchardNotes) {
     auto scriptPubKey = GetScriptForDestination(tkeyid);
 
     // Generate a bundle containing output note A.
-    auto builder = TransactionBuilder(Params(), 1, orchardAnchor, &keystore);
+    auto builder = TransactionBuilder(Params(), 1, orchardAnchor, SaplingMerkleTree::empty_root(), &keystore);
     builder.AddTransparentInput(COutPoint(uint256(), 0), scriptPubKey, 5000);
     builder.AddOrchardOutput(std::nullopt, recipient, 4000, {});
     auto maybeTx = builder.Build();
@@ -876,7 +878,7 @@ TEST(WalletTests, GetConflictedOrchardNotes) {
     auto recipient2 = ivk.Address(j2);
 
     // Generate tx to spend note A
-    auto builder2 = TransactionBuilder(Params(), 2, orchardTree.root());
+    auto builder2 = TransactionBuilder(Params(), 2, orchardTree.root(), SaplingMerkleTree::empty_root());
     auto noteToSpend = std::move(wallet.GetOrchardSpendInfo(orchardEntries, 1, orchardTree.root())[0]);
     builder2.AddOrchardSpend(std::move(noteToSpend.first), std::move(noteToSpend.second));
     auto maybeTx2 = builder2.Build();
@@ -890,7 +892,7 @@ TEST(WalletTests, GetConflictedOrchardNotes) {
 
     // Generate conflicting tx to spend note A
     auto noteToSpend2 = std::move(wallet.GetOrchardSpendInfo(orchardEntries, 1, orchardTree.root())[0]);
-    auto builder3 = TransactionBuilder(Params(), 2, orchardTree.root());
+    auto builder3 = TransactionBuilder(Params(), 2, orchardTree.root(), SaplingMerkleTree::empty_root());
     builder3.AddOrchardSpend(std::move(noteToSpend2.first), std::move(noteToSpend2.second));
     auto maybeTx3 = builder3.Build();
     EXPECT_TRUE(maybeTx3.IsTx());
@@ -992,7 +994,7 @@ TEST(WalletTests, SaplingNullifierIsSpent) {
     auto testNote = GetTestSaplingNote(pa, 50000);
 
     // Generate transaction
-    auto builder = TransactionBuilder(Params(), 1, std::nullopt);
+    auto builder = TransactionBuilder(Params(), 1, std::nullopt, testNote.tree.root());
     builder.AddSaplingSpend(sk,  testNote.note, testNote.tree.witness());
     builder.AddSaplingOutput(extfvk.fvk.ovk, pa, 25000, {});
     auto tx = builder.Build().GetTxOrThrow();
@@ -1079,7 +1081,7 @@ TEST(WalletTests, NavigateFromSaplingNullifierToNote) {
     auto testNote = GetTestSaplingNote(pa, 50000);
 
     // Generate transaction
-    auto builder = TransactionBuilder(Params(), 1, std::nullopt);
+    auto builder = TransactionBuilder(Params(), 1, std::nullopt, testNote.tree.root());
     builder.AddSaplingSpend(sk, testNote.note, testNote.tree.witness());
     builder.AddSaplingOutput(extfvk.fvk.ovk, pa, 25000, {});
     auto tx = builder.Build().GetTxOrThrow();
@@ -1093,7 +1095,13 @@ TEST(WalletTests, NavigateFromSaplingNullifierToNote) {
     ASSERT_TRUE(nf);
     uint256 nullifier = nf.value();
 
-    MerkleFrontiers frontiers = { .sapling = testNote.tree };
+    SproutMerkleTree sproutFrontier;
+    OrchardMerkleFrontier orchardFrontier;
+    MerkleFrontiers frontiers = {
+        .sprout = sproutFrontier,
+        .sapling = testNote.tree,
+        .orchard = orchardFrontier,
+    };
 
     // Verify dummy note is unspent
     EXPECT_FALSE(wallet.IsSaplingSpent(nullifier, std::nullopt));
@@ -1214,10 +1222,11 @@ TEST(WalletTests, SpentSaplingNoteIsFromMe) {
         auto cm = note.cmu().value();
         MerkleFrontiers frontiers;
         frontiers.sapling.append(cm);
+        auto anchor = frontiers.sapling.root();
         auto witness = frontiers.sapling.witness();
 
         // Generate transaction, which sends funds to note B
-        auto builder = TransactionBuilder(Params(), 1, std::nullopt);
+        auto builder = TransactionBuilder(Params(), 1, std::nullopt, anchor);
         builder.AddSaplingSpend(sk, note, witness);
         builder.AddSaplingOutput(extfvk.fvk.ovk, pk, 25000, {});
         auto tx = builder.Build().GetTxOrThrow();
@@ -1278,7 +1287,7 @@ TEST(WalletTests, SpentSaplingNoteIsFromMe) {
         auto nullifier2 = maybe_nf.value();
 
         // Create transaction to spend note B
-        auto builder2 = TransactionBuilder(Params(), 2, std::nullopt);
+        auto builder2 = TransactionBuilder(Params(), 2, std::nullopt, spend_note_witness.root());
         builder2.AddSaplingSpend(sk, note2, spend_note_witness);
         builder2.AddSaplingOutput(extfvk.fvk.ovk, pk, 12500, {});
         auto tx2 = builder2.Build().GetTxOrThrow();
@@ -1479,7 +1488,11 @@ TEST(WalletTests, CachedWitnessesChainTip) {
         block2.vtx.push_back(wtx);
         CBlockIndex index2(block2);
         index2.nHeight = 2;
-        MerkleFrontiers frontiers2 = { .sprout = frontiers.sprout, .sapling = frontiers.sapling };
+        MerkleFrontiers frontiers2 = {
+            .sprout = frontiers.sprout,
+            .sapling = frontiers.sapling,
+            .orchard = frontiers.orchard,
+        };
         wallet.IncrementNoteWitnesses(Params().GetConsensus(), &index2, &block2, frontiers2, true);
 
         auto anchors2 = GetWitnessesAndAnchors(wallet, sproutNotes, saplingNotes, 1, sproutWitnesses, saplingWitnesses);
@@ -1619,7 +1632,11 @@ TEST(WalletTests, CachedWitnessesCleanIndex) {
     std::vector<uint256> sproutAnchors;
     std::vector<uint256> saplingAnchors;
     MerkleFrontiers frontiers;
-    MerkleFrontiers riFrontiers = { .sprout = frontiers.sprout, .sapling = frontiers.sapling };
+    MerkleFrontiers riFrontiers = {
+        .sprout = frontiers.sprout,
+        .sapling = frontiers.sapling,
+        .orchard = frontiers.orchard,
+    };
     std::vector<std::optional<SproutWitness>> sproutWitnesses;
     std::vector<std::optional<SaplingWitness>> saplingWitnesses;
 
@@ -2046,13 +2063,13 @@ TEST(WalletTests, UpdatedSaplingNoteData) {
     auto m = GetTestMasterSaplingSpendingKey();
 
     // Generate dummy Sapling address
-    auto sk = m.Derive(0);
+    auto sk = m.Derive(0 | HARDENED_KEY_LIMIT);
     auto expsk = sk.expsk;
     auto extfvk = sk.ToXFVK();
     auto pa = extfvk.DefaultAddress();
 
     // Generate dummy recipient Sapling address
-    auto sk2 = m.Derive(1);
+    auto sk2 = m.Derive(1 | HARDENED_KEY_LIMIT);
     auto expsk2 = sk2.expsk;
     auto extfvk2 = sk2.ToXFVK();
     auto pa2 = extfvk2.DefaultAddress();
@@ -2060,12 +2077,18 @@ TEST(WalletTests, UpdatedSaplingNoteData) {
     auto testNote = GetTestSaplingNote(pa, 50000);
 
     // Generate transaction
-    auto builder = TransactionBuilder(Params(), 1, std::nullopt);
+    auto builder = TransactionBuilder(Params(), 1, std::nullopt, testNote.tree.root());
     builder.AddSaplingSpend(sk, testNote.note, testNote.tree.witness());
     builder.AddSaplingOutput(extfvk.fvk.ovk, pa2, 25000, {});
     auto tx = builder.Build().GetTxOrThrow();
 
-    MerkleFrontiers frontiers =  { .sapling = testNote.tree };
+    SproutMerkleTree sproutFrontier;
+    OrchardMerkleFrontier orchardFrontier;
+    MerkleFrontiers frontiers = {
+        .sprout = sproutFrontier,
+        .sapling = testNote.tree,
+        .orchard = orchardFrontier,
+    };
 
     // Wallet contains extfvk1 but not extfvk2
     CWalletTx wtx {&wallet, tx};
@@ -2223,7 +2246,7 @@ TEST(WalletTests, MarkAffectedSaplingTransactionsDirty) {
 
     // Generate shielding tx from transparent to Sapling
     // 0.0005 t-ZEC in, 0.0004 z-ZEC out, default fee
-    auto builder = TransactionBuilder(Params(), 1, std::nullopt, &keystore);
+    auto builder = TransactionBuilder(Params(), 1, std::nullopt, SaplingMerkleTree::empty_root(), &keystore);
     builder.AddTransparentInput(
         COutPoint(uint256S("7777777777777777777777777777777777777777777777777777777777777777"), 0),
         scriptPubKey, 5000);
@@ -2234,7 +2257,7 @@ TEST(WalletTests, MarkAffectedSaplingTransactionsDirty) {
     EXPECT_EQ(tx1.vout.size(), 0);
     EXPECT_EQ(tx1.vJoinSplit.size(), 0);
     EXPECT_EQ(tx1.GetSaplingSpendsCount(), 0);
-    EXPECT_EQ(tx1.GetSaplingOutputsCount(), 1);
+    EXPECT_EQ(tx1.GetSaplingOutputsCount(), 2);
     EXPECT_EQ(tx1.GetValueBalanceSapling(), -4000);
 
     CWalletTx wtx {&wallet, tx1};
@@ -2269,17 +2292,23 @@ TEST(WalletTests, MarkAffectedSaplingTransactionsDirty) {
     wtx = wallet.mapWallet[hash];
 
     // Prepare to spend the note that was just created
-    auto maybe_pt = wtx.DecryptSaplingNote(Params(), SaplingOutPoint(hash, 0));
+    auto outpt = SaplingOutPoint(hash, 0);
+    auto maybe_pt = wtx.DecryptSaplingNote(Params(), outpt);
+    if (!static_cast<bool>(maybe_pt)) {
+        outpt = SaplingOutPoint(hash, 1);
+        maybe_pt = wtx.DecryptSaplingNote(Params(), outpt);
+    }
     ASSERT_EQ(static_cast<bool>(maybe_pt), true);
     auto maybe_note = maybe_pt.value().first.note(ivk);
     ASSERT_EQ(static_cast<bool>(maybe_note), true);
     auto note = maybe_note.value();
     auto anchor = frontiers.sapling.root();
-    auto witness = frontiers.sapling.witness();
+    auto witness = wtx.mapSaplingNoteData[outpt].witnesses.back();
+    ASSERT_EQ(anchor, witness.root());
 
     // Create a Sapling-only transaction
     // 0.0004 z-ZEC in, 0.00025 z-ZEC out, default fee, 0.00005 z-ZEC change
-    auto builder2 = TransactionBuilder(Params(), 2, std::nullopt);
+    auto builder2 = TransactionBuilder(Params(), 2, std::nullopt, anchor);
     builder2.AddSaplingSpend(sk, note, witness);
     builder2.AddSaplingOutput(extfvk.fvk.ovk, pk, 2500, {});
     auto tx2 = builder2.Build().GetTxOrThrow();

@@ -35,6 +35,11 @@ SERIAL_SCRIPTS = [
     'wallet_shieldingcoinbase.py',
 ]
 
+FLAKY_SCRIPTS = [
+    # These tests have intermittent failures that we haven't diagnosed yet.
+    'mempool_packages.py',
+]
+
 BASE_SCRIPTS= [
     # Scripts that are run by the travis build process
     # Longest test should go first, to favor running tests in parallel
@@ -42,7 +47,6 @@ BASE_SCRIPTS= [
     'wallet.py',
     'sprout_sapling_migration.py',
     'remove_sprout_shielding.py',
-    'mempool_packages.py',
     # vv Tests less than 2m vv
     'mergetoaddress_mixednotes.py',
     'wallet_shieldcoinbase_sapling.py',
@@ -149,6 +153,7 @@ BASE_SCRIPTS= [
     'threeofthreerestore.py',
     'show_help.py',
     'errors.py',
+    'converttex.py',
 ]
 
 ZMQ_SCRIPTS = [
@@ -178,7 +183,7 @@ EXTENDED_SCRIPTS = [
     'wallet_db_flush.py',
 ]
 
-ALL_SCRIPTS = SERIAL_SCRIPTS + BASE_SCRIPTS + ZMQ_SCRIPTS + EXTENDED_SCRIPTS
+ALL_SCRIPTS = SERIAL_SCRIPTS + FLAKY_SCRIPTS + BASE_SCRIPTS + ZMQ_SCRIPTS + EXTENDED_SCRIPTS
 
 def main():
     # Parse arguments and pass through unrecognised args
@@ -190,7 +195,7 @@ def main():
                                      formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument('--coverage', action='store_true', help='generate a basic coverage report for the RPC interface')
     parser.add_argument('--deterministic', '-d', action='store_true', help='make the output a bit closer to deterministic in order to compare runs.')
-    parser.add_argument('--exclude', '-x', help='specify a comma-seperated-list of scripts to exclude. Do not include the .py extension in the name.')
+    parser.add_argument('--exclude', '-x', help='specify a comma-separated-list of scripts to exclude. Do not include the .py extension in the name.')
     parser.add_argument('--extended', action='store_true', help='run the extended test suite in addition to the basic tests')
     parser.add_argument('--force', '-f', action='store_true', help='run tests even on platforms where they are disabled by default (e.g. windows).')
     parser.add_argument('--help', '-h', '-?', action='store_true', help='print help text and exit')
@@ -247,7 +252,7 @@ def main():
     else:
         # No individual tests have been specified. Run base tests, and
         # optionally ZMQ tests and extended tests.
-        test_list = SERIAL_SCRIPTS + BASE_SCRIPTS
+        test_list = SERIAL_SCRIPTS + FLAKY_SCRIPTS + BASE_SCRIPTS
         if enable_zmq:
             test_list += ZMQ_SCRIPTS
         if args.extended:

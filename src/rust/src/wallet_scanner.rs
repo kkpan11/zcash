@@ -10,13 +10,13 @@ use std::sync::{
 
 use crossbeam_channel as channel;
 use memuse::DynamicUsage;
+use sapling::{bundle::GrothProofBytes, note_encryption::SaplingDomain};
 use zcash_note_encryption::{batch, BatchDomain, Domain, ShieldedOutput, ENC_CIPHERTEXT_SIZE};
 use zcash_primitives::{
     block::BlockHash,
     consensus,
-    sapling::note_encryption::SaplingDomain,
     transaction::{
-        components::{sapling::GrothProofBytes, OutputDescription},
+        components::{sapling as sapling_serialization, OutputDescription},
         Transaction, TxId,
     },
 };
@@ -38,7 +38,7 @@ trait OutputDomain: BatchDomain {
     const KIND: &'static str;
 }
 
-impl<P: consensus::Parameters> OutputDomain for SaplingDomain<P> {
+impl OutputDomain for SaplingDomain {
     const KIND: &'static str = "sapling";
 }
 
@@ -550,7 +550,7 @@ where
 }
 
 type SaplingRunner =
-    BatchRunner<[u8; 32], SaplingDomain<Network>, OutputDescription<GrothProofBytes>, WithUsage>;
+    BatchRunner<[u8; 32], SaplingDomain, OutputDescription<GrothProofBytes>, WithUsage>;
 
 /// A batch scanner for the `zcashd` wallet.
 pub(crate) struct BatchScanner {
@@ -622,7 +622,7 @@ impl BatchScanner {
             runner.add_outputs(
                 block_tag,
                 txid,
-                || SaplingDomain::for_height(params, height),
+                || SaplingDomain::new(sapling_serialization::zip212_enforcement(&params, height)),
                 bundle.shielded_outputs(),
             );
         }
@@ -671,7 +671,7 @@ impl BatchScanner {
 }
 
 pub(crate) struct BatchResult {
-    sapling: HashMap<(TxId, usize), DecryptedNote<[u8; 32], SaplingDomain<Network>>>,
+    sapling: HashMap<(TxId, usize), DecryptedNote<[u8; 32], SaplingDomain>>,
 }
 
 impl BatchResult {
